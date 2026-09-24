@@ -18,3 +18,8 @@ public/pdf.worker.min.mjs
 
 # Type-check and build artifacts
 *.tsbuildinfo
+
+# Playwright
+test-results/
+playwright-report/
+e2e/.fixtures/

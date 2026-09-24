@@ -101,6 +101,14 @@ CREATE INDEX IF NOT EXISTS tool_runs_user_idx ON tool_runs (user_id, created_at 
 CREATE INDEX IF NOT EXISTS tool_runs_guest_idx ON tool_runs (guest_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS tool_runs_tool_idx ON tool_runs (tool_slug, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS usage_daily (
+  scope_key TEXT NOT NULL,
+  day DATE NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (scope_key, day)
+);
+
 CREATE TABLE IF NOT EXISTS rate_limits (
   rule TEXT NOT NULL,
   key_hash TEXT NOT NULL,

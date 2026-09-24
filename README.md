@@ -39,6 +39,10 @@ what you ran, how much data it saved you and how much of your daily allowance yo
 - **Allowance** — guest 5 runs/day per browser, free account 40/day, Pro 2,000, Business 10,000.
   Because the tools run locally, the allowance is a soft limit: the tool keeps working, the
   notice explains the stop and a free account raises it.
+- **Daily allowance** — counted in `usage_daily` (one row per account or browser per day) inside
+  the same transaction that records the run, guarded by a per-scope advisory lock. Two requests
+  arriving together can never both take the last slot, and clearing the history does not hand back
+  a fresh allowance, because the counter is not part of the history rows.
 - **Rate limiting** — fixed windows counted in Postgres (`rate_limits`): sign-in 5 attempts /
   15 min, registration 10 / hour, password change 5 / 15 min, all per hashed IP. Over the limit
   the API answers `429` with a `Retry-After` header. A successful sign-in clears its own counter,
@@ -156,8 +160,9 @@ languages come from the registry.
 - Internal linking: category pages, related tools, guides → tools.
 - `sitemap.xml` + `robots.txt` are generated into `out/` by `scripts/generate-seo.mjs`.
 
-The public origin is read from `MYTHEX_WEB_ORIGIN` at request time — no hostname is ever
-hard-coded, so adding a custom domain does not invalidate canonicals. If the variable is absent the
+The public origin comes from `MYTHEX_WEB_ORIGIN` — no hostname is ever hard-coded. `robots.txt` and
+`sitemap.xml` read it per request, while canonical and hreflang tags are part of the prerendered
+HTML and therefore use the value present at build time (CI sets it). If the variable is absent the
 site still works: `robots.txt` is served without a sitemap line and no canonical/hreflang tags are
 emitted, rather than emitting wrong ones.
 
@@ -168,16 +173,38 @@ date, tools and legal pages use the date their section changed — see `contentD
 ## Tests
 
 ```bash
-npm test          # vitest run
+npm test          # unit tests (vitest run)
 npm run test:watch
+
+npm run test:e2e  # end-to-end browser tests (Playwright)
 ```
 
-Covered: password hashing and verification, schema-before-query ordering on registration,
-duplicate-email and weak-input rejection, sign-in with a wrong and a right password, brute-force
-locking after five failures, session rotation on password change, the rate-limit windows and
-`Retry-After` maths, API body-size handling, file/page/regex/JSON limits, registered tool
+**Unit tests** (9 files, 69 tests) cover password hashing and verification, schema-before-query
+ordering on registration, duplicate-email and weak-input rejection, sign-in with a wrong and a
+right password, brute-force locking after five failures, session rotation on password change, the
+rate-limit windows and `Retry-After` maths, API body-size handling, the atomic allowance
+(lock → counter → record → commit, and rollback), file/page/regex/JSON limits, registered tool
 integrity in both languages, sitemap last-modified dates, and the URL/formatting helpers.
-Browser-level flows are exercised against the live preview (Playwright) rather than a mocked DOM.
+
+**End-to-end tests** (Playwright, 53 checks over desktop and a mobile viewport) run the real
+browser flows: every one of the ten tool pages renders its tool, formats/minifies JSON, decodes a
+JWT, tests a regex with named groups, generates a QR code and downloads it, compresses and
+converts an image, merges/compresses PDFs and extracts text to .docx, prices a product in both
+languages, registers and signs in, changes a password and a profile, and proves that sixty
+simultaneous runs hand out each allowance slot exactly once. Sample files are generated on the fly
+(`e2e/support/fixtures.ts`), so no binaries are committed.
+
+Point the suite at an already running server with `E2E_BASE_URL`, or let it start one itself
+(`E2E_PORT`, default 3000) — that is what CI does.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+1. **verify** — `npm run typecheck`, `npm test`, `npm run build`.
+2. **e2e** — a real PostgreSQL 16 service, a production build, `npx playwright install
+   --with-deps chromium`, then `npm run test:e2e`. Traces, screenshots and the HTML report are
+   uploaded as artifacts when a run fails.
 
 ## Local development
 
