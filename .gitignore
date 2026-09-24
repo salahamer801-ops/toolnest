@@ -1,0 +1,17 @@
+node_modules
+dist
+.DS_Store
+*.local
+.attachments/
+
+# Next.js build output
+.next/
+out/
+next-env.d.ts
+.next-build/
+
+# Local secrets and generated files
+.env
+.env.*
+!.env.example
+public/pdf.worker.min.mjs
