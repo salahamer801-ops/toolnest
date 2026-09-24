@@ -102,6 +102,12 @@ export function AccountDashboard({
             <Zap className="size-3.5" />
             {dict.nav.tools}
           </Link>
+          {user && (user.role === "admin" || user.role === "super_admin") && (
+            <Link href={href(locale, "admin")} className="btn-secondary btn-sm">
+              <ShieldCheck className="size-3.5" />
+              {dict.nav.admin}
+            </Link>
+          )}
           {user ? (
             <button type="button" className="btn-ghost btn-sm" onClick={() => void signOut()}>
               <LogOut className="size-3.5" />

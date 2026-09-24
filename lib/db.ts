@@ -76,6 +76,11 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Added after the first release, so they are migrations rather than columns in CREATE TABLE.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS sessions (
   id BIGSERIAL PRIMARY KEY,
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -108,6 +113,26 @@ CREATE TABLE IF NOT EXISTS usage_daily (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (scope_key, day)
 );
+
+-- Tools can be switched off from the admin dashboard without a redeploy.
+CREATE TABLE IF NOT EXISTS tool_settings (
+  slug TEXT PRIMARY KEY,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  note TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Every admin action is recorded, so changes are attributable after the fact.
+CREATE TABLE IF NOT EXISTS admin_audit (
+  id BIGSERIAL PRIMARY KEY,
+  actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  actor_email TEXT,
+  action TEXT NOT NULL,
+  target TEXT,
+  metadata JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS admin_audit_created_idx ON admin_audit (created_at DESC);
 
 CREATE TABLE IF NOT EXISTS rate_limits (
   rule TEXT NOT NULL,

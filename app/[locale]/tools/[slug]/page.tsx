@@ -11,7 +11,9 @@ import { categories, isLocale, categoryBySlug, site, type Locale } from "@/lib/s
 import { getTool, relatedTools, toolSlugs, toolsByCategory } from "@/lib/tools";
 import { href } from "@/lib/urls";
 
-export const dynamicParams = false;
+// Unknown slugs still 404 through notFound(). On-demand rendering stays allowed so
+// an admin tool switch can refresh a page without a rebuild.
+export const dynamicParams = true;
 
 export function generateStaticParams() {
   return ["en", "ar"].flatMap((locale) => [

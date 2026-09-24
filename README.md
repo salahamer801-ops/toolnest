@@ -67,6 +67,45 @@ Postgres tables (`users`, `sessions`, `tool_runs`) are created on first use — 
 to run. `DATABASE_URL` is injected by the platform; if it is missing the site still works, with
 accounts disabled and a clear notice.
 
+## Admin dashboard (V3)
+
+`/[locale]/admin/` is the operations view, guarded on the server: the page and every
+`/api/admin/*` route check the stored role, so hiding a button changes nothing.
+
+- **Roles and plans** — `users.role` is `user`, `admin` or `super_admin`; `users.plan` is
+  `free`, `pro` or `business` and decides the daily allowance (2,000 / 10,000). A plan is not a
+  permission: a Pro account still cannot open the dashboard.
+- **Getting in** — while the deployment has no admin at all, the first signed-in visitor sees a
+  *Make this account the admin* button on `/admin` (one-time, then the seat is taken). Or list
+  addresses in `ADMIN_EMAILS` and they are promoted on sign-in — that also survives a lost admin
+  account.
+- **Overview** — accounts, new and active users (7 days), open sessions, runs today / 7 / 30 days,
+  failures, guest browsers, bytes saved, average duration, most used tools, plan breakdown and
+  the newest signups.
+- **Users** — search by email or name, filter by plan, role and status, paginated, with runs and
+  sessions per account. Actions: change plan, change role (super admin only), suspend / activate,
+  delete (super admin only). Suspension deletes that account's sessions immediately, so it is
+  signed out everywhere on its next request. Guards stop an admin locking themselves out: no
+  suspending or deleting yourself, and the last super admin cannot be demoted.
+- **Tools** — usage per tool plus a switch and an internal note. A switched-off tool disappears
+  from the home page and the tools index (both rendered per request), and its own page keeps its
+  SEO content but shows a pause notice instead of the tool. Tool pages themselves stay static.
+- **Activity** — every recorded run with its account (or an anonymised guest id), sizes, duration
+  and status, filterable by tool and status.
+- **Audit log** — every admin action with the acting account, so changes are attributable.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/overview` | dashboard counters |
+| GET/POST | `/api/admin/users` | list / act on an account |
+| GET/POST | `/api/admin/tools` | list tools / switch one off or note it |
+| GET | `/api/admin/activity` | recorded runs, filterable, paginated |
+| GET | `/api/admin/audit` | admin action log |
+| GET/POST | `/api/admin/claim` | availability of the first-admin seat / take it |
+
+Tables `tool_settings` and `admin_audit` are created with the rest, and `users` gained the
+`plan`, `status` and `last_seen_at` columns on first use.
+
 ## Limits and safety
 
 Everything that could exhaust the visitor's device or our API is capped, and the user is told
@@ -179,19 +218,22 @@ npm run test:watch
 npm run test:e2e  # end-to-end browser tests (Playwright)
 ```
 
-**Unit tests** (9 files, 69 tests) cover password hashing and verification, schema-before-query
+**Unit tests** (10 files, 84 tests) cover password hashing and verification, schema-before-query
 ordering on registration, duplicate-email and weak-input rejection, sign-in with a wrong and a
 right password, brute-force locking after five failures, session rotation on password change, the
 rate-limit windows and `Retry-After` maths, API body-size handling, the atomic allowance
 (lock → counter → record → commit, and rollback), file/page/regex/JSON limits, registered tool
 integrity in both languages, sitemap last-modified dates, and the URL/formatting helpers.
 
-**End-to-end tests** (Playwright, 53 checks over desktop and a mobile viewport) run the real
+**End-to-end tests** (Playwright, 56 checks over desktop and a mobile viewport) run the real
 browser flows: every one of the ten tool pages renders its tool, formats/minifies JSON, decodes a
 JWT, tests a regex with named groups, generates a QR code and downloads it, compresses and
 converts an image, merges/compresses PDFs and extracts text to .docx, prices a product in both
-languages, registers and signs in, changes a password and a profile, and proves that sixty
-simultaneous runs hand out each allowance slot exactly once. Sample files are generated on the fly
+languages, registers and signs in, changes a password and a profile, proves that sixty
+simultaneous runs hand out each allowance slot exactly once, and covers the admin dashboard:
+refusal for ordinary accounts, a plan change that reaches the account's own limits, suspension
+that signs the account out, a tool switched off that leaves the public listings and pauses its
+own page, and the audit trail recording it all. Sample files are generated on the fly
 (`e2e/support/fixtures.ts`), so no binaries are committed.
 
 Point the suite at an already running server with `E2E_BASE_URL`, or let it start one itself
@@ -223,10 +265,13 @@ NEXT_DIST_DIR=.next-build npm run build
 - **V1** — 10 tools, bilingual, SEO, legal pages.
 - **V2 (this release)** — accounts, saved history, usage limits, account dashboard, Postgres,
   Postgres-backed SEO routes (sitemap/robots read the live origin).
-- **V2 next** — Pro/Business billing (Stripe), batch processing, admin dashboard.
-- **V3** — heavy PDF work: OCR on scans, split/protect/sign, plus first AI tools.
+- **V3 (this release)** — admin dashboard: roles and plans, usage overview, account management,
+  tool switches, activity log and audit trail.
+- **V3 next** — Pro/Business billing (Stripe), batch processing, and heavy PDF work (OCR on
+  scans, split/protect/sign) with the first AI tools.
 - **V4** — public API, API keys, teams, usage dashboard.
 - **V5** — mobile apps sharing the same API, integrations, marketplace.
 
-Deliberately **not** yet: payments, an admin panel, and server-side file processing (OCR on
-scans), plus the Pro/Business plans shown on the pricing page.
+Deliberately **not** yet: payments and server-side file processing (OCR on scans). The Pro and
+Business plans exist in the data model and can be granted from the dashboard, but nothing charges
+for them until billing lands.

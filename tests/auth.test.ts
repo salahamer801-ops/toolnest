@@ -34,6 +34,24 @@ describe("email normalisation", () => {
 });
 
 describe("public user shape", () => {
+  it("carries the stored plan and status, with safe defaults for older rows", () => {
+    const row: UserRow = {
+      id: "9",
+      email: "pro@example.com",
+      name: "Pro",
+      locale: "en",
+      role: "user",
+      plan: "pro",
+      status: "suspended",
+      created_at: new Date("2026-02-02T00:00:00.000Z"),
+    };
+    const user = toPublicUser(row);
+    expect(user.plan).toBe("pro");
+    expect(user.status).toBe("suspended");
+    expect(toPublicUser({ ...row, plan: undefined, status: undefined }).plan).toBe("free");
+    expect(toPublicUser({ ...row, plan: undefined, status: undefined }).status).toBe("active");
+  });
+
   it("never exposes the password hash", () => {
     const row: UserRow = {
       id: "7",
@@ -51,6 +69,8 @@ describe("public user shape", () => {
       name: "Nour",
       locale: "ar",
       role: "user",
+      plan: "free",
+      status: "active",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     expect(JSON.stringify(user)).not.toContain("scrypt");

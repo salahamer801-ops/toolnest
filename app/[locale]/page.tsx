@@ -8,6 +8,7 @@ import { categoryDescriptions, categoryNames, dictionaries } from "@/lib/i18n";
 import { pageMetadata, siteJsonLd } from "@/lib/meta";
 import { posts } from "@/lib/blog";
 import { categories, isLocale, site, type Locale } from "@/lib/site";
+import { disabledToolSlugs } from "@/lib/tool-settings";
 import { popularTools, tools } from "@/lib/tools";
 import { href } from "@/lib/urls";
 
@@ -27,6 +28,10 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   });
 }
 
+// Listing pages read the admin tool switches on every request, so a tool can be
+// paused from the dashboard without waiting for a rebuild or a cache window.
+export const dynamic = "force-dynamic";
+
 export function generateStaticParams() {
   return [{ locale: "en" }, { locale: "ar" }];
 }
@@ -36,7 +41,11 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   const typed: Locale = isLocale(locale) ? locale : "en";
   const dict = dictionaries[typed];
 
-  const searchable = tools.map((tool) => ({
+  // Tools switched off in the admin dashboard stay out of every listing.
+  const disabled = await disabledToolSlugs();
+  const available = tools.filter((tool) => !disabled.includes(tool.slug));
+
+  const searchable = available.map((tool) => ({
     slug: tool.slug,
     category: tool.category,
     name: tool.copy[typed].name,
@@ -96,7 +105,9 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           </Link>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {popularTools.map((tool) => (
+          {popularTools
+            .filter((tool) => !disabled.includes(tool.slug))
+            .map((tool) => (
             <ToolCard key={tool.slug} tool={tool} locale={typed} labels={dict.card} />
           ))}
         </div>

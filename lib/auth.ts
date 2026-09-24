@@ -6,12 +6,20 @@ export const SESSION_COOKIE = "tn_session";
 export const GUEST_COOKIE = "tn_guest";
 const SESSION_DAYS = 30;
 
+export const ROLES = ["user", "admin", "super_admin"] as const;
+export type Role = (typeof ROLES)[number];
+
+export const USER_STATUSES = ["active", "suspended"] as const;
+export type UserStatus = (typeof USER_STATUSES)[number];
+
 export interface UserRow {
   id: string;
   email: string;
   name: string;
   locale: string;
   role: string;
+  plan?: string;
+  status?: string;
   created_at: Date;
   password_hash?: string;
 }
@@ -22,8 +30,28 @@ export interface PublicUser {
   name: string;
   locale: string;
   role: string;
+  plan: string;
+  status: string;
   createdAt: string;
 }
+
+/** Permission check used by every admin route and page — never by the UI alone. */
+export const isAdminRole = (role?: string | null): boolean => role === "admin" || role === "super_admin";
+export const isSuperAdminRole = (role?: string | null): boolean => role === "super_admin";
+
+/**
+ * Accounts listed in ADMIN_EMAILS are admins as soon as they sign in. Kept as an
+ * environment value so a locked-out deployment can always be recovered without a
+ * database console. The first visitor can also claim the empty admin seat.
+ */
+export const adminEmails = (): string[] =>
+  (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+export const roleForEmail = (email: string, current: string): string =>
+  adminEmails().includes(email) && !isAdminRole(current) ? "admin" : current;
 
 export const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
@@ -47,6 +75,8 @@ export const toPublicUser = (row: UserRow): PublicUser => ({
   name: row.name,
   locale: row.locale,
   role: row.role,
+  plan: row.plan ?? "free",
+  status: row.status ?? "active",
   createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
 });
 
@@ -88,11 +118,12 @@ export async function getSessionUser(): Promise<PublicUser | null> {
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   await ensureSchema();
+  // A suspended account loses access everywhere at once, on its next request.
   const row = await one<UserRow>(
-    `SELECT u.id, u.email, u.name, u.locale, u.role, u.created_at
+    `SELECT u.id, u.email, u.name, u.locale, u.role, u.plan, u.status, u.created_at
        FROM sessions s
        JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = $1 AND s.expires_at > now()`,
+      WHERE s.token_hash = $1 AND s.expires_at > now() AND u.status = 'active'`,
     [sha256(token)],
   );
   return row ? toPublicUser(row) : null;

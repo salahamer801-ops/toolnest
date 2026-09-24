@@ -1,7 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { dictionaries } from "@/lib/i18n";
 import type { Locale } from "@/lib/site";
+import { href } from "@/lib/urls";
 
 function Loading() {
   return (
@@ -37,7 +41,45 @@ const SmartPricingCalculator = dynamic(
   { ssr: false, loading: Loading },
 );
 
+/**
+ * The page itself stays static, so the pause is checked once in the browser
+ * against a tiny endpoint. That keeps the switch instant and the HTML fast.
+ */
+function usePaused(slug: string) {
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/tools/availability/", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { paused?: string[] } | null) => {
+        if (active && data?.paused) setPaused(data.paused.includes(slug));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [slug]);
+
+  return paused;
+}
+
 export function ToolRunner({ slug, locale }: { slug: string; locale: Locale }) {
+  const paused = usePaused(slug);
+  const dict = dictionaries[locale];
+
+  if (paused) {
+    return (
+      <div className="panel">
+        <h2 className="text-base font-bold text-slate-900 dark:text-white">{dict.tool.unavailableTitle}</h2>
+        <p className="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">{dict.tool.unavailableNote}</p>
+        <Link href={href(locale, "tools")} className="btn-secondary mt-4 inline-flex">
+          {dict.nav.tools}
+        </Link>
+      </div>
+    );
+  }
+
   switch (slug) {
     case "json-formatter":
       return <JsonFormatter locale={locale} />;

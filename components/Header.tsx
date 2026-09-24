@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Menu, Search, Sparkles, UserRound, X } from "lucide-react";
+import { ChevronDown, Menu, Search, ShieldCheck, Sparkles, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -27,7 +27,17 @@ export function Header({
 }: {
   locale: Locale;
   brand: string;
-  nav: { home: string; tools: string; pricing: string; blog: string; about: string; menu: string; theme: string; language: string };
+  nav: {
+    home: string;
+    tools: string;
+    pricing: string;
+    blog: string;
+    about: string;
+    menu: string;
+    theme: string;
+    language: string;
+    admin: string;
+  };
   categories: HeaderCategory[];
   auth: { signIn: string; account: string };
 }) {
@@ -96,10 +106,18 @@ export function Header({
             <Search className="size-4" />
           </Link>
           {session.user ? (
-            <Link href={href(locale, "account")} className="btn-secondary btn-sm hidden gap-1.5 sm:inline-flex">
-              <UserRound className="size-3.5" />
-              <span className="max-w-24 truncate">{session.user.name || auth.account}</span>
-            </Link>
+            <>
+              {(session.user.role === "admin" || session.user.role === "super_admin") && (
+                <Link href={href(locale, "admin")} className="btn-ghost btn-sm hidden gap-1.5 sm:inline-flex">
+                  <ShieldCheck className="size-4" />
+                  <span className="hidden md:inline">{nav.admin}</span>
+                </Link>
+              )}
+              <Link href={href(locale, "account")} className="btn-secondary btn-sm hidden gap-1.5 sm:inline-flex">
+                <UserRound className="size-3.5" />
+                <span className="max-w-24 truncate">{session.user.name || auth.account}</span>
+              </Link>
+            </>
           ) : (
             <Link href={href(locale, "login")} className="btn-secondary btn-sm hidden sm:inline-flex">
               {auth.signIn}

@@ -5,6 +5,7 @@ import { ToolSearch } from "@/components/ToolSearch";
 import { categoryDescriptions, categoryNames, dictionaries } from "@/lib/i18n";
 import { pageMetadata } from "@/lib/meta";
 import { categories, isLocale, type Locale } from "@/lib/site";
+import { disabledToolSlugs } from "@/lib/tool-settings";
 import { tools } from "@/lib/tools";
 import { href } from "@/lib/urls";
 
@@ -24,12 +25,19 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   });
 }
 
+// Listing pages read the admin tool switches on every request, so a tool can be
+// paused from the dashboard without waiting for a rebuild or a cache window.
+export const dynamic = "force-dynamic";
+
 export default async function ToolsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const typed: Locale = isLocale(locale) ? locale : "en";
   const dict = dictionaries[typed];
 
-  const searchable = tools.map((tool) => ({
+  const disabled = await disabledToolSlugs();
+  const available = tools.filter((tool) => !disabled.includes(tool.slug));
+
+  const searchable = available.map((tool) => ({
     slug: tool.slug,
     category: tool.category,
     name: tool.copy[typed].name,
@@ -48,7 +56,7 @@ export default async function ToolsPage({ params }: { params: Promise<{ locale: 
           {dict.toolsIndex.title}
         </h1>
         <p className="mt-3 text-[15px] leading-7 text-slate-600 dark:text-slate-300">{dict.toolsIndex.subtitle}</p>
-        <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">{tools.length} {dict.toolsIndex.countLabel}</p>
+        <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">{available.length} {dict.toolsIndex.countLabel}</p>
       </header>
 
       <div className="mt-8">

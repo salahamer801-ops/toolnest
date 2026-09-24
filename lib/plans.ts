@@ -48,12 +48,22 @@ export const plans: Record<PlanId, PlanDefinition> = {
   },
 };
 
+const PLAN_IDS: PlanId[] = ["guest", "free", "pro", "business"];
+
+/**
+ * A user's plan is stored on the account. Roles such as `pro`/`business` from
+ * the first release are still honoured so no existing account loses its limits.
+ */
 export const planForRole = (role?: string | null): PlanId => {
   if (role === "pro") return "pro";
   if (role === "business") return "business";
   return "free";
 };
 
-export const planForUser = (user: { role: string } | null): PlanId => (user ? planForRole(user.role) : "guest");
+export const planForUser = (user: { role: string; plan?: string } | null): PlanId => {
+  if (!user) return "guest";
+  if (user.plan && PLAN_IDS.includes(user.plan as PlanId)) return user.plan as PlanId;
+  return planForRole(user.role);
+};
 
 export const planCopy = (plan: PlanId, locale: Locale) => plans[plan].name[locale];

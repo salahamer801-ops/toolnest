@@ -27,7 +27,7 @@ export async function PATCH(request: Request) {
         SET name = COALESCE(NULLIF($2, ''), name),
             locale = COALESCE($3, locale)
       WHERE id = $1
-      RETURNING id, email, name, locale, role, created_at`,
+      RETURNING id, email, name, locale, role, plan, status, created_at`,
     [scope.user.id, name, locale],
   );
 

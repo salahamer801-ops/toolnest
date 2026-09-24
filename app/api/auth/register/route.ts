@@ -1,4 +1,11 @@
-import { createSession, hashPassword, normalizeEmail, toPublicUser, type UserRow } from "@/lib/auth";
+import {
+  createSession,
+  hashPassword,
+  normalizeEmail,
+  roleForEmail,
+  toPublicUser,
+  type UserRow,
+} from "@/lib/auth";
 import { isEmail, json, jsonReadError, readJson } from "@/lib/api";
 import { ensureSchema, one, query } from "@/lib/db";
 import { clientKey, enforceRateLimit, RATE_LIMITS, resetRateLimit } from "@/lib/ratelimit";
@@ -36,10 +43,10 @@ export async function POST(request: Request) {
   if (existing) return json({ error: "email_taken" }, 409);
 
   const inserted = await query<UserRow>(
-    `INSERT INTO users (email, name, password_hash, locale)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, email, name, locale, role, created_at`,
-    [email, name, hashPassword(password), locale],
+    `INSERT INTO users (email, name, password_hash, locale, role)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, email, name, locale, role, plan, status, created_at`,
+    [email, name, hashPassword(password), locale, roleForEmail(email, "user")],
   );
 
   await resetRateLimit(RATE_LIMITS.register, clientKey(request));
