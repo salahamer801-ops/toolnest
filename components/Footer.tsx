@@ -1,5 +1,6 @@
-import { Sparkles } from "lucide-react";
+import { Github, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { site } from "@/lib/site";
 import type { CategoryId, Locale } from "@/lib/site";
 import { href } from "@/lib/urls";
 
@@ -39,6 +40,15 @@ export function Footer({
           </Link>
           <p className="mt-3 max-w-sm text-sm leading-6 text-slate-600 dark:text-slate-400">{footer.tagline}</p>
           <p className="mt-3 text-xs text-slate-500 dark:text-slate-500">{footer.note}</p>
+          <a
+            href={site.github}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-brand-700 dark:text-slate-400 dark:hover:text-brand-300"
+          >
+            <Github className="size-3.5" aria-hidden="true" />
+            GitHub
+          </a>
         </div>
 
         <div>

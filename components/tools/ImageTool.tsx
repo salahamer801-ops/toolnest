@@ -4,6 +4,7 @@ import { Download, Images, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Field, FileDrop, LimitNotice, Notice, Slider, Stat } from "@/components/tools/ui";
 import { dictionaries } from "@/lib/i18n";
+import { IMAGE_LIMITS } from "@/lib/limits";
 import {
   detectFormat,
   formatExtension,
@@ -32,6 +33,7 @@ export function ImageTool({ locale, mode }: { locale: Locale; mode: "compress" |
   const [maxWidth, setMaxWidth] = useState<number | "">("");
   const [target, setTarget] = useState<ImageFormat | "auto">(mode === "convert" ? "image/webp" : "auto");
   const [busy, setBusy] = useState(false);
+  const [notImages, setNotImages] = useState<string[]>([]);
   const { track, limitReached } = useRunTracker(mode === "compress" ? "image-compressor" : "image-converter");
 
   const isCompress = mode === "compress";
@@ -90,6 +92,8 @@ export function ImageTool({ locale, mode }: { locale: Locale; mode: "compress" |
 
   const addFiles = (files: File[]) => {
     const accepted = files.filter((file) => file.type.startsWith("image/"));
+    const rejectedNames = files.filter((file) => !file.type.startsWith("image/")).map((file) => file.name);
+    setNotImages(rejectedNames);
     if (accepted.length === 0) return;
     const fresh = accepted.map((file) => ({ id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 8)}`, file }));
     const combined = [...items, ...fresh];
@@ -120,6 +124,9 @@ export function ImageTool({ locale, mode }: { locale: Locale; mode: "compress" |
       <FileDrop
         multiple
         accept="image/*"
+        locale={locale}
+        limits={IMAGE_LIMITS}
+        existing={items.map((item) => ({ size: item.file.size }))}
         onFiles={addFiles}
         title={isCompress ? (locale === "ar" ? "أفلِت صورك هنا" : "Drop your images here") : dict.actions.uploadFiles}
         hint={
@@ -129,6 +136,17 @@ export function ImageTool({ locale, mode }: { locale: Locale; mode: "compress" |
         }
         icon={<Images className="size-6" aria-hidden="true" />}
       />
+
+      {notImages.length > 0 && (
+        <Notice tone="warn">
+          <p className="font-semibold">{dict.limits.filesTitle}</p>
+          <ul className="mt-1 list-disc space-y-0.5 ps-5 text-[13px]">
+            {notImages.map((name) => (
+              <li key={name}>{dict.limits.notAnImage.replace("{name}", name)}</li>
+            ))}
+          </ul>
+        </Notice>
+      )}
 
       <div className="panel grid gap-4 sm:grid-cols-3">
         <Field

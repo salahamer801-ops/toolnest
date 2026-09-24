@@ -94,7 +94,7 @@ export function AccountDashboard({
             {user ? `${labels.greeting} ${user.name}` : labels.guestTitle}
           </h1>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-            {user ? user.email : labels.guestNote}
+            {user ? user.email : session.status === "loading" ? "…" : labels.guestNote}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -118,6 +118,18 @@ export function AccountDashboard({
       {session.database === false && (
         <div className="mt-5">
           <Notice tone="warn">{auth.databaseOff}</Notice>
+        </div>
+      )}
+
+      {session.status === "error" && (
+        <div className="mt-5">
+          <Notice tone="warn">
+            <p>{labels.loadError}</p>
+            <button type="button" className="btn-ghost btn-sm mt-2" onClick={() => void refreshSession()}>
+              <RefreshCw className="size-3.5" />
+              {labels.retry}
+            </button>
+          </Notice>
         </div>
       )}
 

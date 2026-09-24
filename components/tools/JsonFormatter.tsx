@@ -4,6 +4,7 @@ import { Braces, Eraser, FileJson, Minimize2, ShieldCheck, Sparkles, Upload } fr
 import { useMemo, useRef, useState } from "react";
 import { CopyButton, LimitNotice, Notice, Segmented } from "@/components/tools/ui";
 import { dictionaries } from "@/lib/i18n";
+import { JSON_LIMITS } from "@/lib/limits";
 import { useRunTracker } from "@/lib/session";
 import type { Locale } from "@/lib/site";
 import { downloadText, formatBytes } from "@/lib/utils";
@@ -62,6 +63,7 @@ export function JsonFormatter({ locale }: { locale: Locale }) {
   const [issue, setIssue] = useState<ParseIssue | null>(null);
   const [valid, setValid] = useState<boolean | null>(null);
   const [status, setStatus] = useState("");
+  const [limitError, setLimitError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const { track, limitReached } = useRunTracker("json-formatter");
 
@@ -69,6 +71,14 @@ export function JsonFormatter({ locale }: { locale: Locale }) {
 
   const run = (mode: "format" | "minify" | "validate") => {
     const text = input.trim();
+    if (new TextEncoder().encode(text).byteLength > JSON_LIMITS.maxBytes) {
+      setLimitError(dict.limits.jsonTooLarge.replace("{max}", formatBytes(JSON_LIMITS.maxBytes)));
+      setIssue(null);
+      setOutput("");
+      setStatus("");
+      return;
+    }
+    setLimitError("");
     if (!text) {
       setIssue(null);
       setValid(null);
@@ -138,6 +148,14 @@ export function JsonFormatter({ locale }: { locale: Locale }) {
               const file = event.target.files?.[0];
               event.target.value = "";
               if (!file) return;
+              if (file.size > JSON_LIMITS.maxBytes) {
+                setLimitError(dict.limits.jsonTooLarge.replace("{max}", formatBytes(JSON_LIMITS.maxBytes)));
+                setOutput("");
+                setIssue(null);
+                setStatus("");
+                return;
+              }
+              setLimitError("");
               setInput(await file.text());
               setOutput("");
               setIssue(null);
@@ -232,6 +250,13 @@ export function JsonFormatter({ locale }: { locale: Locale }) {
           )}
         </div>
       </div>
+
+      {limitError && (
+        <Notice tone="warn">
+          <p className="font-semibold">{dict.limits.filesTitle}</p>
+          <p className="mt-1 text-[13px]">{limitError}</p>
+        </Notice>
+      )}
 
       {issue && (
         <Notice tone="error">

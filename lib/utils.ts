@@ -1,11 +1,17 @@
+/** Formats a number for display, dropping a pointless trailing ".0". */
+const trimZeros = (value: number, digits: number) => {
+  const fixed = value.toFixed(digits);
+  return fixed.endsWith("0") ? String(Number(fixed)) : fixed;
+};
+
 export const formatBytes = (bytes: number): string => {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;
-  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  if (kb < 1024) return `${kb < 10 ? trimZeros(kb, 1) : Math.round(kb)} KB`;
   const mb = kb / 1024;
-  if (mb < 1024) return `${mb < 10 ? mb.toFixed(2) : mb.toFixed(1)} MB`;
-  return `${(mb / 1024).toFixed(2)} GB`;
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(2) : trimZeros(mb, 1)} MB`;
+  return `${trimZeros(mb / 1024, 2)} GB`;
 };
 
 export const percentChange = (before: number, after: number): number => {

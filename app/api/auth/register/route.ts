@@ -1,6 +1,7 @@
 import { createSession, hashPassword, normalizeEmail, toPublicUser, type UserRow } from "@/lib/auth";
-import { isEmail, json, readJson } from "@/lib/api";
-import { one, query } from "@/lib/db";
+import { isEmail, json, jsonReadError, readJson } from "@/lib/api";
+import { ensureSchema, one, query } from "@/lib/db";
+import { clientKey, enforceRateLimit, RATE_LIMITS, resetRateLimit } from "@/lib/ratelimit";
 import { usageSummary } from "@/lib/usage";
 
 export const dynamic = "force-dynamic";
@@ -13,13 +14,19 @@ interface RegisterBody {
 }
 
 export async function POST(request: Request) {
-  const body = await readJson<RegisterBody>(request);
-  if (!body) return json({ error: "invalid_body" }, 400);
+  const limited = await enforceRateLimit(RATE_LIMITS.register, request);
+  if (limited) return limited;
 
-  const name = (body.name ?? "").trim();
-  const email = normalizeEmail(body.email ?? "");
-  const password = body.password ?? "";
-  const locale = body.locale === "ar" ? "ar" : "en";
+  // The tables must exist before the first query on users.
+  await ensureSchema();
+
+  const body = await readJson<RegisterBody>(request);
+  if (!body.ok) return jsonReadError(body.error);
+
+  const name = (body.data.name ?? "").trim();
+  const email = normalizeEmail(body.data.email ?? "");
+  const password = body.data.password ?? "";
+  const locale = body.data.locale === "ar" ? "ar" : "en";
 
   if (name.length < 2) return json({ error: "name_too_short" }, 400);
   if (!isEmail(email)) return json({ error: "invalid_email" }, 400);
@@ -34,6 +41,8 @@ export async function POST(request: Request) {
      RETURNING id, email, name, locale, role, created_at`,
     [email, name, hashPassword(password), locale],
   );
+
+  await resetRateLimit(RATE_LIMITS.register, clientKey(request));
 
   const user = toPublicUser(inserted[0]);
   await createSession(user.id);

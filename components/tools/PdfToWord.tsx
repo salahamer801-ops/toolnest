@@ -4,6 +4,7 @@ import { Download, FileText, ScanText } from "lucide-react";
 import { useState } from "react";
 import { FileDrop, LimitNotice, Notice, Stat } from "@/components/tools/ui";
 import { dictionaries } from "@/lib/i18n";
+import { exceedsPageLimit, PDF_LIMITS, SINGLE_PDF_LIMITS } from "@/lib/limits";
 import { loadPdfjs } from "@/lib/pdf";
 import { useRunTracker } from "@/lib/session";
 import type { Locale } from "@/lib/site";
@@ -40,8 +41,16 @@ export function PdfToWord({ locale }: { locale: Locale }) {
     setError("");
     setDocxReady(false);
     try {
+      if (selected.size > PDF_LIMITS.maxFileBytes) {
+        setError(dict.limits.pdfTooLarge.replace("{max}", formatBytes(PDF_LIMITS.maxFileBytes)));
+        return;
+      }
       const pdfjs = await loadPdfjs();
       const document = await pdfjs.getDocument({ data: new Uint8Array(await selected.arrayBuffer()) }).promise;
+      if (exceedsPageLimit(document.numPages, PDF_LIMITS.maxPages)) {
+        setError(dict.limits.pdfTooManyPages.replace("{max}", String(PDF_LIMITS.maxPages)));
+        return;
+      }
       const collected: PageText[] = [];
       const empty: number[] = [];
 
@@ -159,8 +168,14 @@ export function PdfToWord({ locale }: { locale: Locale }) {
             setFile(selected);
             void extract(selected);
           }}
+          locale={locale}
+          limits={SINGLE_PDF_LIMITS}
           title={locale === "ar" ? "أفلِت ملف PDF هنا" : "Drop your PDF here"}
-          hint={locale === "ar" ? "يُقرأ الملف داخل متصفحك ويُستخرج نصه" : "The file is read in your browser and its text extracted"}
+          hint={
+            locale === "ar"
+              ? "للملفات النصية: يُقرأ الملف داخل متصفحك ويُستخرج نصه. الملفات الممسوحة ضوئيًا تحتاج OCR وليست مدعومة بعد."
+              : "Text-based PDFs: the file is read in your browser and its text extracted. Scanned PDFs need OCR, which is not supported yet."
+          }
           icon={<ScanText className="size-6" aria-hidden="true" />}
         />
       ) : (

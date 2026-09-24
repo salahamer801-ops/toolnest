@@ -4,9 +4,10 @@ import { AlertCircle, Check, CheckCircle2, Copy, Info, UploadCloud } from "lucid
 import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
 import { dictionaries } from "@/lib/i18n";
+import { IMAGE_LIMITS, selectAllowedFiles, type FileLimits, type FileRejection } from "@/lib/limits";
 import type { Locale } from "@/lib/site";
 import { href } from "@/lib/urls";
-import { copyToClipboard, joinClass } from "@/lib/utils";
+import { copyToClipboard, formatBytes, joinClass } from "@/lib/utils";
 
 export function Notice({
   tone = "info",
@@ -62,6 +63,10 @@ export function FileDrop({
   title,
   hint,
   icon,
+  locale = "en",
+  limits = IMAGE_LIMITS,
+  existing = [],
+  onRejected,
 }: {
   accept?: string;
   multiple?: boolean;
@@ -69,13 +74,37 @@ export function FileDrop({
   title: string;
   hint?: string;
   icon?: ReactNode;
+  locale?: Locale;
+  limits?: FileLimits;
+  /** Files already added, so the count and total size limits stay accurate. */
+  existing?: { size: number }[];
+  onRejected?: (rejected: FileRejection[]) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
+  const [skipped, setSkipped] = useState<FileRejection[]>([]);
+
+  const effectiveLimits: FileLimits = multiple ? limits : { ...limits, maxFiles: 1 };
+  const labels = dictionaries[locale].limits;
+
+  const describe = (rejection: FileRejection) => {
+    if (rejection.reason === "too_many_files") {
+      return labels.tooManyFiles.replace("{max}", String(effectiveLimits.maxFiles));
+    }
+    if (rejection.reason === "file_too_large") {
+      return labels.fileTooLarge
+        .replace("{name}", rejection.name)
+        .replace("{max}", formatBytes(effectiveLimits.maxFileBytes));
+    }
+    return labels.totalTooLarge.replace("{max}", formatBytes(effectiveLimits.maxTotalBytes));
+  };
 
   const handle = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    onFiles(Array.from(fileList));
+    const selection = selectAllowedFiles(Array.from(fileList), existing, effectiveLimits);
+    setSkipped(selection.rejected);
+    if (selection.rejected.length > 0) onRejected?.(selection.rejected);
+    if (selection.accepted.length > 0) onFiles(selection.accepted);
   };
 
   return (
@@ -116,6 +145,26 @@ export function FileDrop({
       <button type="button" className="btn-primary mt-4" onClick={() => inputRef.current?.click()}>
         {title}
       </button>
+
+      {skipped.length > 0 && (
+        <div className="mt-4 text-start" onClick={(event) => event.stopPropagation()}>
+          <Notice tone="warn">
+            <p className="font-semibold">{labels.filesTitle}</p>
+            <ul className="mt-1 list-disc space-y-0.5 ps-5 text-[13px]">
+              {skipped.map((rejection, index) => (
+                <li key={`${rejection.name}-${index}`}>{describe(rejection)}</li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              className="btn-ghost btn-sm mt-2"
+              onClick={() => setSkipped([])}
+            >
+              {labels.dismiss}
+            </button>
+          </Notice>
+        </div>
+      )}
     </div>
   );
 }

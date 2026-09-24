@@ -4,6 +4,7 @@ import { Download, FileDown, Gauge, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Field, FileDrop, LimitNotice, Notice, Segmented, Slider, Stat } from "@/components/tools/ui";
 import { dictionaries } from "@/lib/i18n";
+import { exceedsPageLimit, PDF_LIMITS, SINGLE_PDF_LIMITS } from "@/lib/limits";
 import { loadPdfjs } from "@/lib/pdf";
 import { useRunTracker } from "@/lib/session";
 import type { Locale } from "@/lib/site";
@@ -36,10 +37,21 @@ export function PdfCompressor({ locale }: { locale: Locale }) {
     setError("");
     setResult(null);
     try {
+      if (file.size > PDF_LIMITS.maxFileBytes) {
+        setError(
+          dict.limits.pdfTooLarge.replace("{max}", formatBytes(PDF_LIMITS.maxFileBytes)),
+        );
+        return;
+      }
+
       if (mode === "safe") {
         setProgress(locale === "ar" ? "إعادة بناء بنية الملف…" : "Rebuilding the file structure…");
         const { PDFDocument } = await import("pdf-lib");
         const doc = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
+        if (exceedsPageLimit(doc.getPageCount(), PDF_LIMITS.maxPages)) {
+          setError(dict.limits.pdfTooManyPages.replace("{max}", String(PDF_LIMITS.maxPages)));
+          return;
+        }
         doc.setProducer("ToolNest");
         doc.setCreator("ToolNest");
         doc.setTitle("");
@@ -53,6 +65,10 @@ export function PdfCompressor({ locale }: { locale: Locale }) {
         const pdfjs = await loadPdfjs();
         const { PDFDocument } = await import("pdf-lib");
         const source = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+        if (exceedsPageLimit(source.numPages, PDF_LIMITS.maxPages)) {
+          setError(dict.limits.pdfTooManyPages.replace("{max}", String(PDF_LIMITS.maxPages)));
+          return;
+        }
         const target = await PDFDocument.create();
 
         for (let pageNumber = 1; pageNumber <= source.numPages; pageNumber += 1) {
@@ -117,6 +133,8 @@ export function PdfCompressor({ locale }: { locale: Locale }) {
             setResult(null);
             setError("");
           }}
+          locale={locale}
+          limits={SINGLE_PDF_LIMITS}
           title={locale === "ar" ? "أفلِت ملف PDF هنا" : "Drop your PDF here"}
           hint={locale === "ar" ? "ملف واحد في كل مرة — يبقى داخل متصفحك" : "One file at a time — it stays inside your browser"}
           icon={<FileDown className="size-6" aria-hidden="true" />}

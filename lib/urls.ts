@@ -5,9 +5,13 @@ export const href = (locale: Locale, path = "") => {
   return clean ? `/${locale}/${clean}/` : `/${locale}/`;
 };
 
-/** Public origin when the platform tells us at build time — never hard-coded. */
+/**
+ * Public origin, injected by the platform (MYTHEX_WEB_ORIGIN) and read at
+ * request time — never hard-coded, and updated automatically when a custom
+ * domain is added.
+ */
 export const siteOrigin = (): string | null => {
-  const raw = (process.env.MYTHEX_WEB_ORIGIN || process.env.NEXT_PUBLIC_SITE_ORIGIN || "").split(",")[0].trim().replace(/\/+$/, "");
+  const raw = (process.env.MYTHEX_WEB_ORIGIN || "").split(",")[0].trim().replace(/\/+$/, "");
   return raw || null;
 };
 

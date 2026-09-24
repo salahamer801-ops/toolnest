@@ -22,14 +22,32 @@ export interface SessionUsage {
   byTool: { toolSlug: string; runs: number; savedBytes: number }[];
 }
 
+/**
+ * `status` keeps four distinct situations apart, so a temporary network or
+ * server problem is never shown to the visitor as "signed out":
+ * - loading: the first answer is still on its way
+ * - authenticated: we have a session
+ * - guest: the server answered, there is no session
+ * - error: the server could not be reached; whatever we knew before is kept
+ */
+export type SessionStatus = "loading" | "authenticated" | "guest" | "error";
+
 export interface SessionState {
   user: SessionUser | null;
   usage: SessionUsage | null;
   database: boolean;
+  status: SessionStatus;
+  /** Kept for convenience: true only while the very first answer is pending. */
   loading: boolean;
 }
 
-const initialState: SessionState = { user: null, usage: null, database: true, loading: true };
+const initialState: SessionState = {
+  user: null,
+  usage: null,
+  database: true,
+  status: "loading",
+  loading: true,
+};
 
 let state: SessionState = initialState;
 const listeners = new Set<() => void>();
@@ -55,6 +73,7 @@ const getServerSnapshot = () => initialState;
 export async function refreshSession(): Promise<SessionState> {
   try {
     const response = await fetch("/api/auth/me/", { cache: "no-store" });
+    if (!response.ok) throw new Error(`session request failed: ${response.status}`);
     const data = (await response.json()) as {
       user: SessionUser | null;
       usage: SessionUsage | null;
@@ -64,10 +83,13 @@ export async function refreshSession(): Promise<SessionState> {
       user: data.user ?? null,
       usage: data.usage ?? null,
       database: data.database !== false,
+      status: data.user ? "authenticated" : "guest",
       loading: false,
     });
   } catch {
-    setState({ user: null, usage: null, loading: false });
+    // A temporary failure must not look like a sign-out: keep what we knew and
+    // mark the state as an error so the UI can say so instead of guessing.
+    setState({ status: "error", loading: false });
   }
   loaded = true;
   return state;
@@ -125,15 +147,13 @@ export async function logRun(payload: {
       database?: boolean;
     };
     if (data.database === false) return { ok: false, limited: false, remaining: null };
-    if (data.ok) {
+    if (data.ok && state.usage) {
       setState({
-        usage: state.usage
-          ? {
-              ...state.usage,
-              usedToday: typeof data.used === "number" ? data.used : state.usage.usedToday + 1,
-              remaining: data.remaining ?? Math.max(0, state.usage.remaining - 1),
-            }
-          : state.usage,
+        usage: {
+          ...state.usage,
+          usedToday: typeof data.used === "number" ? data.used : state.usage.usedToday + 1,
+          remaining: data.remaining ?? Math.max(0, state.usage.remaining - 1),
+        },
       });
     }
     return {
@@ -148,10 +168,17 @@ export async function logRun(payload: {
   }
 }
 
-export async function signOut() {
-  await fetch("/api/auth/logout/", { method: "POST" });
+/** Signs out. Returns false when the server could not be reached, so the UI can say so. */
+export async function signOut(): Promise<boolean> {
+  try {
+    const response = await fetch("/api/auth/logout/", { method: "POST" });
+    if (!response.ok) return false;
+  } catch {
+    return false;
+  }
   loaded = true;
   await refreshSession();
+  return state.status === "guest";
 }
 
 export interface RunPayload {

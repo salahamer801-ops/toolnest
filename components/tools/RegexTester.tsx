@@ -4,6 +4,7 @@ import { AlertTriangle, Regex as RegexIcon, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CopyButton, LimitNotice, Notice } from "@/components/tools/ui";
 import { dictionaries } from "@/lib/i18n";
+import { REGEX_LIMITS } from "@/lib/limits";
 import { useRunTracker } from "@/lib/session";
 import type { Locale } from "@/lib/site";
 
@@ -60,7 +61,19 @@ export function RegexTester({ locale }: { locale: Locale }) {
     .map(([flag]) => flag)
     .join("");
 
+  // Guards against huge inputs before any regular expression is executed.
+  const limitError = useMemo(() => {
+    if (pattern.length > REGEX_LIMITS.maxPatternChars) {
+      return dict.limits.patternTooLong.replace("{max}", String(REGEX_LIMITS.maxPatternChars));
+    }
+    if (text.length > REGEX_LIMITS.maxTextChars) {
+      return dict.limits.textTooLong.replace("{max}", REGEX_LIMITS.maxTextChars.toLocaleString());
+    }
+    return "";
+  }, [pattern, text, dict]);
+
   const result = useMemo(() => {
+    if (limitError) return { error: "", matches: [] as MatchInfo[] };
     if (!pattern) return { error: "", matches: [] as MatchInfo[] };
     let regex: RegExp;
     try {
@@ -97,7 +110,7 @@ export function RegexTester({ locale }: { locale: Locale }) {
       }
     }
     return { error: "", matches };
-  }, [pattern, text, flagString]);
+  }, [pattern, text, flagString, limitError]);
 
   useEffect(() => {
     if (result.matches.length > 0) void trackOnce();
@@ -223,6 +236,13 @@ export function RegexTester({ locale }: { locale: Locale }) {
         />
       </div>
 
+      {limitError && (
+        <Notice tone="warn">
+          <p className="font-semibold">{dict.limits.filesTitle}</p>
+          <p className="mt-1 text-[13px]">{limitError}</p>
+        </Notice>
+      )}
+
       {result.error && (
         <Notice tone="error">
           <p className="font-semibold">{locale === "ar" ? "خطأ في النمط" : "Pattern error"}</p>
@@ -233,7 +253,7 @@ export function RegexTester({ locale }: { locale: Locale }) {
         </Notice>
       )}
 
-      {!result.error && (
+      {!result.error && !limitError && (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="panel">
             <div className="mb-2 flex items-center justify-between gap-2">

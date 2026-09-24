@@ -39,6 +39,13 @@ what you ran, how much data it saved you and how much of your daily allowance yo
 - **Allowance** — guest 5 runs/day per browser, free account 40/day, Pro 2,000, Business 10,000.
   Because the tools run locally, the allowance is a soft limit: the tool keeps working, the
   notice explains the stop and a free account raises it.
+- **Rate limiting** — fixed windows counted in Postgres (`rate_limits`): sign-in 5 attempts /
+  15 min, registration 10 / hour, password change 5 / 15 min, all per hashed IP. Over the limit
+  the API answers `429` with a `Retry-After` header. A successful sign-in clears its own counter,
+  so a real user is never locked out by their own logins.
+- **Sessions** — changing a password deletes every session of that user and issues a fresh one;
+  expired sessions and rate-limit rows older than two hours are removed by housekeeping that runs
+  at most every 30 minutes (there is no scheduler in this environment).
 - **Account page** — plan and usage, history with delete/clear, profile (name, language) and
   password change.
 
@@ -55,6 +62,30 @@ what you ran, how much data it saved you and how much of your daily allowance yo
 Postgres tables (`users`, `sessions`, `tool_runs`) are created on first use — no migration step
 to run. `DATABASE_URL` is injected by the platform; if it is missing the site still works, with
 accounts disabled and a clear notice.
+
+## Limits and safety
+
+Everything that could exhaust the visitor's device or our API is capped, and the user is told
+why rather than having files silently ignored.
+
+| Where | Limit |
+| --- | --- |
+| API JSON bodies | 1 MB (checked from `Content-Length` and the real byte length) |
+| Image tools | 20 files, 25 MB each, 100 MB total |
+| Merge PDF | 20 files, 50 MB each, 100 MB total, 300 pages in total |
+| PDF compressor / PDF to Word | 50 MB, 300 pages |
+| Regex tester | 2,000 characters of pattern, 500,000 characters of text |
+| JSON formatter | 2 MB before anything is parsed |
+| Tool statistics | sizes and durations are validated and clamped server-side |
+
+Reported usage is self-reported by the browser, so it is used for history and statistics only —
+anything billed later must be measured on the server.
+
+Baseline security headers are sent from `next.config.mjs` (`X-Content-Type-Options`,
+`Referrer-Policy`, `Permissions-Policy`, `Strict-Transport-Security`, and `X-Frame-Options`,
+which defaults to `SAMEORIGIN` so the app can still be previewed inside a frame — set
+`X_FRAME_OPTIONS=DENY` to change it). A strict CSP is deliberately not set yet: the tools rely on
+blob/data URLs and web fonts. The production container runs as the unprivileged `node` user.
 
 ## Stack
 
@@ -125,10 +156,28 @@ languages come from the registry.
 - Internal linking: category pages, related tools, guides → tools.
 - `sitemap.xml` + `robots.txt` are generated into `out/` by `scripts/generate-seo.mjs`.
 
-The public origin is read from `MYTHEX_WEB_ORIGIN` (falling back to `NEXT_PUBLIC_SITE_ORIGIN`) at
-build time — no hostname is ever hard-coded, so adding a custom domain does not invalidate
-canonicals. If the variable is absent the build still succeeds: `robots.txt` is written without a
-sitemap line and no canonical/hreflang tags are emitted, rather than emitting wrong ones.
+The public origin is read from `MYTHEX_WEB_ORIGIN` at request time — no hostname is ever
+hard-coded, so adding a custom domain does not invalidate canonicals. If the variable is absent the
+site still works: `robots.txt` is served without a sitemap line and no canonical/hreflang tags are
+emitted, rather than emitting wrong ones.
+
+`sitemap.xml` uses a real last-modified date per page (blog articles use their own publication
+date, tools and legal pages use the date their section changed — see `contentDates` in
+`lib/site.ts`), so a rebuild never makes unchanged pages look freshly edited.
+
+## Tests
+
+```bash
+npm test          # vitest run
+npm run test:watch
+```
+
+Covered: password hashing and verification, schema-before-query ordering on registration,
+duplicate-email and weak-input rejection, sign-in with a wrong and a right password, brute-force
+locking after five failures, session rotation on password change, the rate-limit windows and
+`Retry-After` maths, API body-size handling, file/page/regex/JSON limits, registered tool
+integrity in both languages, sitemap last-modified dates, and the URL/formatting helpers.
+Browser-level flows are exercised against the live preview (Playwright) rather than a mocked DOM.
 
 ## Local development
 

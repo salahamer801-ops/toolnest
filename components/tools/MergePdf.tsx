@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Download, Layers, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { FileDrop, LimitNotice, Notice, Stat } from "@/components/tools/ui";
 import { dictionaries } from "@/lib/i18n";
+import { exceedsPageLimit, MERGE_PDF_LIMITS } from "@/lib/limits";
 import { useRunTracker } from "@/lib/session";
 import type { Locale } from "@/lib/site";
 import { downloadBlob, formatBytes } from "@/lib/utils";
@@ -22,6 +23,7 @@ export function MergePdf({ locale }: { locale: Locale }) {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultSize, setResultSize] = useState(0);
   const [error, setError] = useState("");
+  const [skippedPages, setSkippedPages] = useState<string[]>([]);
   const { track, limitReached } = useRunTracker("merge-pdf");
 
   const addFiles = async (files: File[]) => {
@@ -29,13 +31,25 @@ export function MergePdf({ locale }: { locale: Locale }) {
     if (pdfs.length === 0) return;
     setBusy(true);
     setError("");
+    setSkippedPages([]);
     const { PDFDocument } = await import("pdf-lib");
     const prepared: PdfItem[] = [];
+    const overLimit: string[] = [];
+    // Page counts are only known after reading a file, so they are checked as
+    // each one is opened and the running total is capped too.
+    let runningPages = items.reduce((sum, item) => sum + (item.pages ?? 0), 0);
+
     for (const file of pdfs) {
       const id = `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 8)}`;
       try {
         const doc = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
-        prepared.push({ id, file, pages: doc.getPageCount() });
+        const pages = doc.getPageCount();
+        if (exceedsPageLimit(runningPages + pages, MERGE_PDF_LIMITS.maxPages)) {
+          overLimit.push(file.name);
+          continue;
+        }
+        runningPages += pages;
+        prepared.push({ id, file, pages });
       } catch {
         prepared.push({
           id,
@@ -48,6 +62,7 @@ export function MergePdf({ locale }: { locale: Locale }) {
         });
       }
     }
+    setSkippedPages(overLimit);
     setItems((prev) => [...prev, ...prepared]);
     setBusy(false);
   };
@@ -66,6 +81,14 @@ export function MergePdf({ locale }: { locale: Locale }) {
   const merge = async () => {
     const usable = items.filter((item) => item.pages !== null);
     if (usable.length < 2) return;
+    if (exceedsPageLimit(usable.reduce((sum, item) => sum + (item.pages ?? 0), 0), MERGE_PDF_LIMITS.maxPages)) {
+      setError(
+        locale === "ar"
+          ? `إجمالي الصفحات يتجاوز ${MERGE_PDF_LIMITS.maxPages} صفحة. احذف بعض الملفات ثم أعد المحاولة.`
+          : `The total is over ${MERGE_PDF_LIMITS.maxPages} pages. Remove some files and try again.`,
+      );
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -109,6 +132,9 @@ export function MergePdf({ locale }: { locale: Locale }) {
         multiple
         accept="application/pdf,.pdf"
         onFiles={(files) => void addFiles(files)}
+        locale={locale}
+        limits={MERGE_PDF_LIMITS}
+        existing={items.map((item) => ({ size: item.file.size }))}
         title={locale === "ar" ? "أضف ملفات PDF" : "Add PDF files"}
         hint={
           locale === "ar"
@@ -204,6 +230,17 @@ export function MergePdf({ locale }: { locale: Locale }) {
             </button>
           </div>
         </>
+      )}
+
+      {skippedPages.length > 0 && (
+        <Notice tone="warn">
+          <p className="font-semibold">{dict.limits.filesTitle}</p>
+          <ul className="mt-1 list-disc space-y-0.5 ps-5 text-[13px]">
+            {skippedPages.map((name) => (
+              <li key={name}>{dict.limits.pageLimit.replace("{name}", name).replace("{max}", String(MERGE_PDF_LIMITS.maxPages))}</li>
+            ))}
+          </ul>
+        </Notice>
       )}
 
       {items.filter((i) => i.pages !== null).length === 1 && (

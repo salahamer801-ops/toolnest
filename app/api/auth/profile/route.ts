@@ -1,4 +1,4 @@
-import { json, readJson, resolveScope } from "@/lib/api";
+import { json, jsonReadError, readJson, resolveScope } from "@/lib/api";
 import { query } from "@/lib/db";
 import { toPublicUser, type UserRow } from "@/lib/auth";
 import { usageSummary } from "@/lib/usage";
@@ -15,10 +15,10 @@ export async function PATCH(request: Request) {
   if (!scope?.user) return json({ error: "unauthorized" }, 401);
 
   const body = await readJson<ProfileBody>(request);
-  if (!body) return json({ error: "invalid_body" }, 400);
+  if (!body.ok) return jsonReadError(body.error);
 
-  const name = (body.name ?? "").trim();
-  const locale = body.locale === "ar" ? "ar" : body.locale === "en" ? "en" : null;
+  const name = (body.data.name ?? "").trim();
+  const locale = body.data.locale === "ar" ? "ar" : body.data.locale === "en" ? "en" : null;
 
   if (name && name.length < 2) return json({ error: "name_too_short" }, 400);
 

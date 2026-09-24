@@ -2,10 +2,23 @@ export const site = {
   /** Working brand name — change it here and it updates everywhere. */
   brand: "ToolNest",
   version: "1.0",
-  /** Placeholder address until the real one is set up. */
-  contactEmail: "hello@toolnest.app",
-  github: "https://github.com/",
+  contactEmail: "salahamer801@gmail.com",
+  github: "https://github.com/salahamer801-ops/toolnest",
 };
+
+/**
+ * Real "last changed" dates, used for sitemap lastModified instead of the
+ * current time. Bump the section you actually edit; a page never looks newer
+ * than it is just because the site was rebuilt.
+ */
+export const contentDates = {
+  site: "2026-09-24",
+  tools: "2026-09-24",
+  legal: "2026-09-24",
+};
+
+/** Per-page overrides when a single page changes without the rest of its section. */
+export const pageDates: Record<string, string> = {};
 
 export type Locale = "en" | "ar";
 

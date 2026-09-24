@@ -9,19 +9,32 @@ export function hasDatabase() {
   return Boolean(process.env.DATABASE_URL);
 }
 
+/**
+ * TLS is verified by default so a wrong or intercepted certificate is rejected.
+ * `DATABASE_CA_CERT` adds a provider CA (use \n for line breaks in the value);
+ * `DATABASE_SSL_NO_VERIFY=true` is an explicit escape hatch for providers whose
+ * certificate cannot be validated — never the default.
+ */
+export function sslOptionsFor(url: string): false | { rejectUnauthorized: boolean; ca?: string } | undefined {
+  const isLocal = /@(localhost|127\.0\.0\.1|\[::1\])/.test(url);
+  if (isLocal || /sslmode=disable/i.test(url)) return undefined;
+  if (process.env.DATABASE_SSL_NO_VERIFY === "true") return { rejectUnauthorized: false };
+  const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, "\n");
+  return ca ? { rejectUnauthorized: true, ca } : { rejectUnauthorized: true };
+}
+
 function getPool(): Pool {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL is not configured");
   }
   if (!pool) {
     const url = process.env.DATABASE_URL;
-    const isLocal = /@(localhost|127\.0\.0\.1|\[::1\])/.test(url);
     pool = new Pool({
       connectionString: url,
       max: 5,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
-      ssl: isLocal ? undefined : { rejectUnauthorized: false },
+      ssl: sslOptionsFor(url),
     });
   }
   return pool;
@@ -71,6 +84,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS sessions_expires_idx ON sessions (expires_at);
 
 CREATE TABLE IF NOT EXISTS tool_runs (
   id BIGSERIAL PRIMARY KEY,
@@ -86,6 +100,16 @@ CREATE TABLE IF NOT EXISTS tool_runs (
 CREATE INDEX IF NOT EXISTS tool_runs_user_idx ON tool_runs (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS tool_runs_guest_idx ON tool_runs (guest_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS tool_runs_tool_idx ON tool_runs (tool_slug, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS rate_limits (
+  rule TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  window_start TIMESTAMPTZ NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (rule, key_hash, window_start)
+);
+CREATE INDEX IF NOT EXISTS rate_limits_window_idx ON rate_limits (window_start);
 `;
 
 let schemaReady: Promise<void> | null = null;
